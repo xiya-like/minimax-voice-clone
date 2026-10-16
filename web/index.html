@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiniMax 音色克隆工具</title>
+<script>
+  // 在首次绘制前定好主题，避免深浅色闪烁
+  try {
+    var t = localStorage.getItem("minimax-voice-theme");
+    if (!t) t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", t);
+  } catch (e) {}
+</script>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2b303b;
+    --text:#e6e8ee; --muted:#98a0b0; --accent:#5b8cff; --accent2:#3d6ee0;
+    --warn:#ffb454; --danger:#ff6b6b; --ok:#4ade80; --radius:10px;
+
+    --warn-bg:#241f12; --warn-bd:#5a4a20; --warn-fg:#ffd79a;
+    --err-bg:#241414;  --err-bd:#5a2626;  --err-fg:#ffb3b3;
+    --ok-bg:#12241a;   --ok-bd:#1f4a30;   --ok-fg:#a8f0c0;
+    --accent-fg:#cfe0ff;
+    --free-bg:#1a3326; --free-hov:#204030; --free-bd:#2f5a41; --free-fg:#a8d8bb;
+  }
+
+  /* 浅色主题：只覆盖变量，无需改动任何组件样式 */
+  html[data-theme="light"]{
+    --bg:#f4f6f9; --panel:#ffffff; --panel2:#f0f2f6; --line:#d8dee8;
+    --text:#1a1f28; --muted:#5c6675; --accent:#2f6bff; --accent2:#1d4fd8;
+    --warn:#9a6200; --danger:#c0392b; --ok:#157f4a;
+
+    --warn-bg:#fdf6e6; --warn-bd:#e8d9ae; --warn-fg:#6d4a06;
+    --err-bg:#fdeeee;  --err-bd:#f0c2c2;  --err-fg:#96271b;
+    --ok-bg:#eaf7ef;   --ok-bd:#b3ddc4;   --ok-fg:#0f6038;
+    --accent-fg:#e8effe;
+    --free-bg:#e8f5ed; --free-hov:#d6ecdf; --free-bd:#a8d5ba; --free-fg:#0f6038;
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    font-size:14px;line-height:1.6}
+  .wrap{max-width:940px;margin:0 auto;padding:24px 20px 80px}
+  header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+  header h1{margin:0 0 4px;font-size:20px}
+  header p{margin:0;color:var(--muted);font-size:13px}
+  .theme-btn{padding:7px 14px;border-radius:8px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--text);cursor:pointer;font-size:13px;
+    font-family:inherit;white-space:nowrap}
+  .theme-btn:hover{border-color:var(--accent)}
+
+  .banner{margin:16px 0;padding:10px 14px;border-radius:var(--radius);
+    font-size:13px;border:1px solid var(--line);background:var(--panel2)}
+  .banner.billing{border-color:var(--warn-bd);background:var(--warn-bg);color:var(--warn-fg)}
+  .banner.err{border-color:var(--err-bd);background:var(--err-bg);color:var(--err-fg)}
+  .banner.ok{border-color:var(--ok-bd);background:var(--ok-bg);color:var(--ok-fg)}
+
+  .tabs{display:flex;gap:8px;margin:20px 0 0;border-bottom:1px solid var(--line)}
+  .tab{padding:10px 18px;cursor:pointer;border:none;background:none;color:var(--muted);
+    font-size:14px;border-bottom:2px solid transparent}
+  .tab.active{color:var(--text);border-bottom-color:var(--accent)}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:20px;margin-top:18px}
+  .panel[hidden]{display:none}
+
+  fieldset{border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px 16px;margin:0 0 18px}
+  legend{color:var(--accent);font-size:13px;padding:0 6px}
+
+  label{display:block;margin:12px 0 5px;font-size:13px;color:var(--muted)}
+  input[type=text],input[type=number],select,textarea{
+    width:100%;background:var(--panel2);color:var(--text);
+    border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:14px;
+    font-family:inherit}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+  select option{background:var(--panel2);color:var(--text)}
+  input[type=file]{color:var(--muted);font-size:13px}
+  .file-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .file-row input[type=file]{flex:1;min-width:0}
+  input[type=checkbox]{accent-color:var(--accent)}
+  textarea{min-height:96px;resize:vertical;line-height:1.7}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+
+  .row{display:flex;gap:14px;flex-wrap:wrap}
+  .row>div{flex:1;min-width:180px}
+
+  .check{display:flex;align-items:flex-start;gap:8px;margin:10px 0}
+  .check input{margin-top:4px;flex:none;width:15px;height:15px}
+  .check label{margin:0;color:var(--text);font-size:13px;cursor:pointer}
+  .check .hint{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+  .hint{color:var(--muted);font-size:12px;margin-top:3px}
+
+  table{width:100%;border-collapse:collapse;margin-top:8px}
+  th,td{padding:6px 4px;text-align:left;font-size:13px;vertical-align:middle}
+  th{color:var(--muted);font-weight:500;font-size:12px}
+  td input{padding:6px 8px}
+  .mini{padding:5px 10px;font-size:12px;background:var(--panel2);color:var(--muted);
+    border:1px solid var(--line);border-radius:6px;cursor:pointer}
+  .mini:hover{color:var(--text);border-color:var(--accent)}
+
+  .actions{display:flex;gap:12px;margin-top:18px;flex-wrap:wrap}
+  .btn{flex:1;min-width:200px;padding:13px 16px;border-radius:8px;cursor:pointer;
+    border:1px solid var(--line);background:var(--panel2);color:var(--text);
+    font-size:14px;font-family:inherit;text-align:center}
+  .btn.primary{border-color:var(--accent);background:var(--accent2)}
+  .btn.primary:hover:not(:disabled){background:var(--accent)}
+  .btn.free{border-color:var(--free-bd);background:var(--free-bg)}
+  .btn.free:hover:not(:disabled){background:var(--free-hov)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn small{display:block;font-size:11px;color:var(--muted);font-weight:400;margin-top:3px}
+  .btn.primary small{color:var(--accent-fg)}
+  .btn.free small{color:var(--free-fg)}
+
+  .cost{font-size:12px;color:var(--warn);margin-top:10px}
+  .msg{margin-top:16px;padding:11px 14px;border-radius:8px;font-size:13px;display:none}
+  .msg.show{display:block}
+  .msg.err{background:var(--err-bg);border:1px solid var(--err-bd);color:var(--err-fg)}
+  .msg.ok{background:var(--ok-bg);border:1px solid var(--ok-bd);color:var(--ok-fg)}
+  .msg.info{background:var(--panel2);border:1px solid var(--line)}
+  audio{width:100%;margin-top:10px}
+  .dl{display:inline-block;margin-top:10px;color:var(--accent);font-size:13px}
+
+  .file-state{font-size:12px;color:var(--muted);margin-top:6px}
+  .file-state.ok{color:var(--ok)}
+  .file-state.err{color:var(--danger)}
+
+  .voice-list{margin-top:10px}
+  .voice-item{border:1px solid var(--line);border-radius:8px;padding:10px 12px;
+    margin-bottom:8px;background:var(--panel2);font-size:13px}
+  .voice-item .vid{font-family:ui-monospace,Consolas,monospace;color:var(--accent)}
+  .expired{color:var(--danger)}
+  .warntext{color:var(--warn)}
+  .oktext{color:var(--ok)}
+  .busy{opacity:.6;pointer-events:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>MiniMax 音色克隆工具</h1>
+      <p>本地运行 · 音色克隆与语音合成</p>
+    </div>
+    <button class="theme-btn" id="themeBtn" type="button">☾ 深色</button>
+  </header>
+
+  <div id="billing" class="banner billing">
+    本工具所有请求<strong>按量计费，直接扣除账户余额</strong>。音色克隆要求账号已完成实名认证。<br>
+    音色费 <strong>¥9.90</strong> 只在<strong>正式合成</strong>（用该音色生成音频）时扣一次；<strong>克隆与试听均不扣这笔</strong>，试听只按试听文本的字符数计费。
+  </div>
+  <div id="keybar" class="banner">正在检查 API Key…</div>
+  <div id="globalmsg" class="msg"></div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="clone">① 克隆音色</button>
+    <button class="tab" data-tab="tts">② 音色合成</button>
+  </div>
+
+  <!-- ============================ 克隆 ============================ -->
+  <section class="panel" id="panel-clone">
+    <fieldset>
+      <legend>1 · 待复刻音频</legend>
+      <p class="hint">要求：mp3 / m4a / wav，时长 <strong>10 秒 ~ 5 分钟</strong>，大小 ≤ 20 MB。单人、无背景音乐、无混响的人声效果最佳。<br>选择文件后<strong>只在本机校验，不会上传</strong>；点下方克隆按钮时才真正上传。</p>
+      <div class="file-row">
+        <input type="file" id="sampleFile" accept=".mp3,.m4a,.wav">
+        <button class="mini" id="clearSample" type="button">清除</button>
+      </div>
+      <div class="file-state" id="sampleState">尚未选择文件</div>
+      <label class="check">
+        <input type="checkbox" id="sampleOk">
+        <span>我确认对上传的声音样本具有充分、合法、必要的权利或授权</span>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>2 · 示例音频（可选，强烈建议）</legend>
+      <p class="hint">小于 8 秒的样本 + 其准确文稿，可明显提升音色相似度与稳定性。留空则跳过。<br>同样只在点击克隆按钮时才上传。</p>
+      <div class="file-row">
+        <input type="file" id="promptFile" accept=".mp3,.m4a,.wav">
+        <button class="mini" id="clearPrompt" type="button">清除</button>
+      </div>
+      <div class="file-state" id="promptState">未选择（不使用示例音频）</div>
+      <label for="promptText">示例音频对应文本（上传了就必须填）</label>
+      <input type="text" id="promptText" placeholder="必须与音频内容完全一致，句末加标点">
+    </fieldset>
+
+    <fieldset>
+      <legend>3 · 音色参数</legend>
+      <label for="voiceId">voice_id（自定义）</label>
+      <input type="text" id="voiceId" placeholder="如 MyVoice_001">
+      <div class="hint" id="voiceIdHint">长度 8-256，首字符为英文字母，仅可含字母/数字/-/_，末位不可为 - 或 _</div>
+
+      <div class="row">
+        <div>
+          <label for="cloneModel">模型（仅试听时使用）</label>
+          <select id="cloneModel"></select>
+        </div>
+        <div>
+          <label for="cloneLang">语言增强 language_boost</label>
+          <select id="cloneLang"></select>
+          <p class="hint">克隆日语音色请选 Japanese，素材也应为日语朗读</p>
+        </div>
+      </div>
+
+      <label>可选增强（默认关闭，是否开启由你决定）</label>
+      <div class="check">
+        <input type="checkbox" id="noise">
+        <span>降噪 need_noise_reduction<span class="hint">默认 false。素材环境嘈杂时可开启</span></span>
+      </div>
+      <div class="check">
+        <input type="checkbox" id="vnorm">
+        <span>音量归一化 need_volume_normalization<span class="hint">默认 false。素材音量偏小时可开启</span></span>
+      </div>
+      <div class="check">
+        <input type="checkbox" id="watermark">
+        <span>AIGC 音频水印 aigc_watermark<span class="hint">默认 false。开启会在音频末尾附加标识</span></span>
+      </div>
+
+      <label for="textValidation">素材预期文本 text_validation（可选，≤ 200 字符）</label>
+      <input type="text" id="textValidation" placeholder="填写素材里实际念的文本，可拦截文案不符的请求">
+      <label for="accuracy">ASR 相似度阈值 accuracy：<span id="accVal">0.7</span>（默认 0.7，低于该值返回 1043）</label>
+      <input type="range" id="accuracy" min="0" max="1" step="0.05" value="0.7">
+    </fieldset>
+
+    <fieldset id="demoBox" hidden>
+      <legend>4 · 试听文本（仅「克隆并试听」需要）</legend>
+      <label for="demoText">试听文本（上限 1000 字符，约 500 个汉字）</label>
+      <textarea id="demoText" placeholder="填入要用新音色朗读的内容"></textarea>
+      <div class="cost" id="demoCost">0 字符 · 本次试听按 0 字符计费</div>
+    </fieldset>
+
+    <div class="actions">
+      <button class="btn free" id="btnCloneFree">
+        仅克隆音色
+        <small>本次不产生任何费用</small>
+      </button>
+      <button class="btn primary" id="btnCloneDemo">
+        克隆并试听
+        <small>按试听字符数计费 · 不扣 ¥9.90 音色费</small>
+      </button>
+    </div>
+    <div class="msg" id="cloneMsg"></div>
+  </section>
+
+  <!-- ============================ 合成 ============================ -->
+  <section class="panel" id="panel-tts" hidden>
+    <fieldset>
+      <legend>1 · 选择音色</legend>
+      <label for="voiceSelect">已克隆的音色</label>
+      <select id="voiceSelect"></select>
+      <div class="voice-list" id="voiceList"></div>
+      <button class="mini" id="refreshVoices" type="button">刷新台账</button>
+      <p class="hint" id="pendingHint">复刻音色 7 天内未正式调用会被系统删除，请尽快至少合成一次。</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>2 · 合成参数</legend>
+      <label for="ttsText">合成文本（&lt; 10000 字符）</label>
+      <textarea id="ttsText" placeholder="输入要合成的文本"></textarea>
+      <div class="cost" id="ttsCost">0 字符 · 本次合成按 0 字符计费</div>
+      <div class="row">
+        <div>
+          <label for="ttsModel">模型</label>
+          <select id="ttsModel"></select>
+        </div>
+        <div>
+          <label for="ttsLang">语言增强</label>
+          <select id="ttsLang"></select>
+        </div>
+      </div>
+
+      <label for="ttsSpeed">语速 speed：<span id="speedVal">1.0</span>（0.5 - 2，默认 1）</label>
+      <input type="range" id="ttsSpeed" min="0.5" max="2" step="0.1" value="1">
+
+      <label for="ttsVol">音量 vol：<span id="volVal">1.0</span>（0-10，默认 1）</label>
+      <input type="range" id="ttsVol" min="0.1" max="10" step="0.1" value="1">
+
+      <label for="ttsPitch">语调 pitch：<span id="pitchVal">0</span>（-12 - 12，默认 0）</label>
+      <input type="range" id="ttsPitch" min="-12" max="12" step="1" value="0">
+
+      <div class="row">
+        <div>
+          <label for="emotion">情绪 emotion（留空由模型自动匹配）</label>
+          <select id="emotion"></select>
+        </div>
+        <div>
+          <label for="audioFormat">输出格式</label>
+          <select id="audioFormat"></select>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>3 · 发音覆盖 pronunciation_dict（可选）</legend>
+      <p class="hint">格式「原文/替换内容」，日语支持假名。不填则不生效。</p>
+      <table id="ttsPronTable"><tbody></tbody></table>
+      <button class="mini" id="addTtsPron" type="button">+ 添加一条</button>
+    </fieldset>
+
+    <div class="actions">
+      <button class="btn primary" id="btnTts">生成语音</button>
+    </div>
+    <div class="msg" id="ttsMsg"></div>
+  </section>
+</div>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+let HEALTH = null;
+let busy = false;                 // 单任务锁：同一时刻只允许一个请求
+let SAMPLE = null;                // {file_id, filename, bytes, duration}
+let PROMPT = null;
+let demoMode = false;             // 是否选择了「克隆并试听」
+
+/* ------------------------------ 主题 ------------------------------ */
+
+const THEME_KEY = "minimax-voice-theme";
+
+function currentTheme() {
+  return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  $("themeBtn").textContent = theme === "light" ? "☀ 浅色" : "☾ 深色";
+  $("themeBtn").title = theme === "light" ? "当前浅色，点击切换到深色" : "当前深色，点击切换到浅色";
+}
+
+$("themeBtn").addEventListener("click", () => {
+  const next = currentTheme() === "light" ? "dark" : "light";
+  applyTheme(next);
+  try {
+    localStorage.setItem(THEME_KEY, next);
+  } catch (e) {
+    /* 隐私模式下无法持久化，仅本次会话生效 */
+  }
+});
+
+// <head> 已提前定好主题，这里只同步按钮文案
+applyTheme(currentTheme());
+
+/* ------------------------------ 工具 ------------------------------ */
+
+function showMsg(el, text, kind) {
+  el.className = "msg show " + (kind || "info");
+  el.textContent = text;
+}
+function clearMsg(el) { el.className = "msg"; el.textContent = ""; }
+
+function chargedChars(text) {
+  // 官方口径：1 个汉字 = 2 个字符；英文字母、标点、空格等各 = 1 个字符
+  // 汉字/假名按 2 计，全角标点仍按 1 计
+  return Array.from(text || "").reduce((n, c) => {
+    const cp = c.codePointAt(0);
+    const wide = (cp >= 0x3400 && cp <= 0x4dbf) || (cp >= 0x4e00 && cp <= 0x9fff) ||
+                 (cp >= 0xf900 && cp <= 0xfaff) || (cp >= 0x3040 && cp <= 0x309f) ||
+                 (cp >= 0x30a0 && cp <= 0x30ff);
+    return n + (wide ? 2 : 1);
+  }, 0);
+}
+
+async function postJSON(url, payload, ms) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ms || 180000);
+  try {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: ctl.signal,
+    });
+    return await r.json();
+  } catch (e) {
+    if (e.name === "AbortError") {
+      return { ok: false, error: "请求超时，已停止且不会自动重试（避免重复计费）。请确认网络后手动重试。" };
+    }
+    return { ok: false, error: "本地服务未响应，请确认 server.py 仍在运行。" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function postBinary(url, file, purpose) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 90000);
+  try {
+    const r = await fetch(url + "?purpose=" + encodeURIComponent(purpose), {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream", "X-Filename": encodeURIComponent(file.name) },
+      body: file,
+      signal: ctl.signal,
+    });
+    return await r.json();
+  } catch (e) {
+    if (e.name === "AbortError") return { ok: false, error: "上传超时，请手动重试。" };
+    return { ok: false, error: "本地服务未响应，请确认 server.py 仍在运行。" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/* ------------------------------ 初始化 ------------------------------ */
+
+async function boot() {
+  try {
+    const r = await fetch("/api/health");
+    HEALTH = await r.json();
+  } catch (e) {
+    $("keybar").className = "banner err";
+    $("keybar").textContent = "无法连接本地服务";
+    return;
+  }
+
+  if (HEALTH.key_configured) {
+    $("keybar").className = "banner ok";
+    $("keybar").textContent = "API Key 已配置：" + HEALTH.key_hint + "（按量计费）";
+  } else {
+    $("keybar").className = "banner err";
+    $("keybar").textContent = "未配置 API Key —— 请在项目目录的 .env 中写入 MINIMAX_API_KEY 后重启服务";
+  }
+  setBusy(!HEALTH.key_configured);
+
+  fillSelect($("cloneModel"), HEALTH.models);
+  fillSelect($("cloneLang"), HEALTH.languages);
+  fillSelect($("ttsModel"), HEALTH.models);
+  fillSelect($("ttsLang"), HEALTH.languages);
+  fillSelect($("emotion"), [""].concat(HEALTH.emotions));
+  fillSelect($("audioFormat"), ["mp3", "wav", "flac"].slice(0, 3));
+  $("cloneLang").value = "auto";
+  $("ttsLang").value = "auto";
+
+  addPronRow($("ttsPronTable"));
+  loadVoices();
+}
+
+function fillSelect(sel, values) {
+  sel.innerHTML = "";
+  values.forEach((v) => {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = v;
+    sel.appendChild(o);
+  });
+}
+
+function setBusy(state) {
+  busy = state;
+  ["btnCloneFree", "btnCloneDemo", "btnTts"].forEach((id) => {
+    $(id).disabled = state || !HEALTH || !HEALTH.key_configured;
+  });
+  document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("busy", state));
+}
+
+/* --------------------------- 标签页切换 --------------------------- */
+
+document.querySelectorAll(".tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+    document.querySelectorAll(".panel").forEach((p) => (p.hidden = true));
+    tab.classList.add("active");
+    $("panel-" + tab.dataset.tab).hidden = false;
+  });
+});
+
+/* ------------------------------ 本地校验 ------------------------------ */
+
+const ALLOWED_EXTS = [".mp3", ".m4a", ".wav"];
+const MAX_BYTES = 20 * 1024 * 1024;
+
+/** 在浏览器里解析 WAV 头得到时长，用于选择文件时的即时提示 */
+async function readWavDuration(file) {
+  try {
+    const buf = await file.slice(0, 65536).arrayBuffer();
+    const dv = new DataView(buf);
+    const tag = (o) => String.fromCharCode(dv.getUint8(o), dv.getUint8(o + 1), dv.getUint8(o + 2), dv.getUint8(o + 3));
+    if (tag(0) !== "RIFF" || tag(8) !== "WAVE") return null;
+    let pos = 12, byteRate = null, dataSize = null;
+    while (pos + 8 <= dv.byteLength) {
+      const id = tag(pos), size = dv.getUint32(pos + 4, true);
+      if (id === "fmt " && pos + 24 <= dv.byteLength) {
+        // fmt 块布局：+0 标识 +4 块大小 +8 音频格式 +10 声道 +12 采样率
+        //            +16 字节率(byte_rate) +20 块对齐 +22 位深
+        byteRate = dv.getUint32(pos + 16, true);
+      } else if (id === "data") {
+        // 必须用块头「声明」的大小，不能拿 64KB 切片去截断，
+        // 否则大文件会被算成几十分之一秒。
+        dataSize = (size === 0xFFFFFFFF) ? Math.max(0, file.size - (pos + 8)) : size;
+        break;
+      }
+      pos += 8 + size + (size % 2);
+    }
+    if (!byteRate || !dataSize) return null;
+    return dataSize / byteRate;
+  } catch (e) {
+    return null;
+  }
+}
+
+/** 只在本机校验，不发起任何网络请求 */
+async function inspectLocally(file, purpose) {
+  const dot = file.name.lastIndexOf(".");
+  const ext = dot >= 0 ? file.name.slice(dot).toLowerCase() : "";
+  if (!ALLOWED_EXTS.includes(ext)) {
+    return { ok: false, error: "不支持的格式「" + (ext || "无扩展名") + "」，仅支持 mp3 / m4a / wav" };
+  }
+  if (file.size <= 0) return { ok: false, error: "文件为空" };
+  if (file.size > MAX_BYTES) {
+    return { ok: false, error: "文件 " + (file.size / 1048576).toFixed(1) + " MB 超过 20 MB 上限" };
+  }
+
+  const duration = ext === ".wav" ? await readWavDuration(file) : null;
+  let note = duration != null ? " · " + duration.toFixed(1) + " 秒" : " · 时长将在提交时校验";
+
+  if (duration != null) {
+    if (purpose === "prompt_audio" && duration >= 8) {
+      return { ok: false, error: "示例音频时长 " + duration.toFixed(1) + " 秒，需小于 8 秒" };
+    }
+    if (purpose === "voice_clone") {
+      if (duration < 10) return { ok: false, error: "时长 " + duration.toFixed(1) + " 秒低于下限 10 秒" };
+      if (duration > 300) return { ok: false, error: "时长 " + duration.toFixed(1) + " 秒超过上限 5 分钟" };
+    }
+  }
+  return { ok: true, file: file, name: file.name, size: file.size, duration: duration, note: note };
+}
+
+function describe(item) {
+  return item.name + " · " + (item.size / 1048576).toFixed(2) + " MB" + item.note +
+         " · 待上传（点克隆按钮时才上传）";
+}
+
+/* ------------------------------ 上传 ------------------------------ */
+
+$("sampleFile").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  SAMPLE = null;
+  if (!f) { $("sampleState").textContent = "尚未选择文件"; $("sampleState").className = "file-state"; return; }
+  $("sampleState").textContent = "正在本机校验…";
+  $("sampleState").className = "file-state";
+  const r = await inspectLocally(f, "voice_clone");
+  if (r.ok) {
+    SAMPLE = r;
+    $("sampleState").textContent = describe(r);
+    $("sampleState").className = "file-state ok";
+  } else {
+    $("sampleState").textContent = r.error + "（本机拦下，未上传）";
+    $("sampleState").className = "file-state err";
+  }
+});
+
+$("promptFile").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  PROMPT = null;
+  if (!f) { $("promptState").textContent = "未选择（不使用示例音频）"; $("promptState").className = "file-state"; return; }
+  $("promptState").textContent = "正在本机校验…";
+  $("promptState").className = "file-state";
+  const r = await inspectLocally(f, "prompt_audio");
+  if (r.ok) {
+    PROMPT = r;
+    $("promptState").textContent = describe(r);
+    $("promptState").className = "file-state ok";
+  } else {
+    $("promptState").textContent = r.error + "（本机拦下，未上传）";
+    $("promptState").className = "file-state err";
+  }
+});
+
+/** 仅在点击克隆按钮时调用：真正上传并拿到 file_id */
+async function ensureUploaded(item, purpose) {
+  if (item.file_id) return item.file_id;
+  const r = await postBinary("/api/upload", item.file, purpose);
+  if (!r.ok) throw new Error(r.error || "上传失败");
+  item.file_id = r.file_id;
+  return r.file_id;
+}
+
+$("clearSample").addEventListener("click", () => {
+  $("sampleFile").value = "";
+  SAMPLE = null;
+  $("sampleState").textContent = "尚未选择文件";
+  $("sampleState").className = "file-state";
+  clearMsg($("cloneMsg"));
+});
+
+$("clearPrompt").addEventListener("click", () => {
+  $("promptFile").value = "";
+  PROMPT = null;
+  $("promptText").value = "";
+  $("promptState").textContent = "未选择（不使用示例音频）";
+  $("promptState").className = "file-state";
+  clearMsg($("cloneMsg"));
+});
+
+/* --------------------------- 发音覆盖表格 --------------------------- */
+
+function addPronRow(table, from = "", to = "") {
+  const tr = document.createElement("tr");
+  tr.innerHTML =
+    '<td><input type="text" placeholder="原文，如 20日"></td>' +
+    '<td><input type="text" placeholder="替换为，如 はつか"></td>' +
+    '<td><button type="button" class="mini">删除</button></td>';
+  tr.children[0].firstChild.value = from;
+  tr.children[1].firstChild.value = to;
+  tr.querySelector("button").addEventListener("click", () => tr.remove());
+  table.querySelector("tbody").appendChild(tr);
+}
+
+function readPron(table) {
+  return Array.from(table.querySelectorAll("tr"))
+    .map((tr) => {
+      const a = tr.children[0].firstChild.value.trim();
+      const b = tr.children[1].firstChild.value.trim();
+      return a && b ? a + "/" + b : null;
+    })
+    .filter(Boolean);
+}
+
+$("addTtsPron").addEventListener("click", () => addPronRow($("ttsPronTable")));
+
+/* ------------------------------ 实时校验 ------------------------------ */
+
+$("voiceId").addEventListener("input", () => {
+  const v = $("voiceId").value.trim();
+  if (!v) { $("voiceIdHint").textContent = "长度 8-256，首字符为英文字母，仅可含字母/数字/-/_，末位不可为 - 或 _"; $("voiceIdHint").style.color = ""; return; }
+  if (v.length < 8) { $("voiceIdHint").textContent = "太短，至少 8 个字符（当前 " + v.length + "）"; $("voiceIdHint").style.color = "var(--danger)"; return; }
+  if (v.length > 256) { $("voiceIdHint").textContent = "太长，最多 256 个字符"; $("voiceIdHint").style.color = "var(--danger)"; return; }
+  if (!/^[A-Za-z]/.test(v)) { $("voiceIdHint").textContent = "首字符必须是英文字母"; $("voiceIdHint").style.color = "var(--danger)"; return; }
+  if (/[^A-Za-z0-9_-]/.test(v)) { $("voiceIdHint").textContent = "含非法字符，仅允许字母、数字、-、_"; $("voiceIdHint").style.color = "var(--danger)"; return; }
+  if (/[-_]$/.test(v)) { $("voiceIdHint").textContent = "末位字符不可为 - 或 _"; $("voiceIdHint").style.color = "var(--danger)"; return; }
+  $("voiceIdHint").textContent = "命名规则校验通过"; $("voiceIdHint").style.color = "var(--ok)";
+});
+
+$("accuracy").addEventListener("input", (e) => ($("accVal").textContent = Number(e.target.value).toFixed(2)));
+$("ttsSpeed").addEventListener("input", (e) => ($("speedVal").textContent = Number(e.target.value).toFixed(1)));
+$("ttsVol").addEventListener("input", (e) => ($("volVal").textContent = Number(e.target.value).toFixed(1)));
+$("ttsPitch").addEventListener("input", (e) => ($("pitchVal").textContent = e.target.value));
+
+function updateCost(boxId, counterId, textId) {
+  const raw = $(textId).value;
+  const han = Array.from(raw).filter((c) => {
+    const cp = c.codePointAt(0);
+    return (cp >= 0x3400 && cp <= 0x9fff) || (cp >= 0x3040 && cp <= 0x30ff);
+  }).length;
+  const n = chargedChars(raw);
+  let msg = "字数 " + raw.length + " · 计费字符 " + n + "（汉字与假名按 2 字符计）";
+  if (n > 800) msg += "　⚠ 已接近 1000 字符上限，可能被服务端拒绝，请酌情减少";
+  if (raw.length > 1000) msg += "　⚠ 原文已超 1000 字符上限，提交会被拒绝";
+  $(counterId).textContent = msg;
+  $(boxId).hidden = false;
+}
+$("demoText").addEventListener("input", () => updateCost("demoBox", "demoCost", "demoText"));
+$("ttsText").addEventListener("input", () => {
+  const raw = $("ttsText").value;
+  const n = chargedChars(raw);
+  $("ttsCost").textContent = "字数 " + raw.length + " · 计费字符 " + n + "（汉字与假名按 2 字符计）";
+  if (n >= 10000) $("ttsCost").textContent += "　⚠ 已达单次 10000 字符上限，请分段合成";
+});
+
+/* ------------------------------ 克隆提交 ------------------------------ */
+
+$("btnCloneDemo").addEventListener("click", () => {
+  if (!demoMode) {
+    // 第一次点击：展开试听面板，让用户填写
+    demoMode = true;
+    $("demoBox").hidden = false;
+    $("demoText").focus();
+    showMsg($("cloneMsg"), "已展开试听文本框。填写后再次点击「克隆并试听」提交；这次会产生试听合成费用。", "info");
+    return;
+  }
+  if (!$("demoText").value.trim()) {
+    showMsg($("cloneMsg"), "请填写试听文本，或改点「仅克隆音色」以跳过试听。", "err");
+    return;
+  }
+  submitClone(true);
+});
+
+$("btnCloneFree").addEventListener("click", () => submitClone(false));
+
+async function submitClone(withDemo) {
+  const msg = $("cloneMsg");
+  clearMsg(msg);
+
+  if (!$("sampleOk").checked) {
+    showMsg(msg, "请先勾选声音授权确认框。", "err"); return;
+  }
+  if (!SAMPLE) {
+    showMsg(msg, "请先选择待复刻音频。", "err"); return;
+  }
+  const voiceId = $("voiceId").value.trim();
+  if (!voiceId) { showMsg(msg, "请填写 voice_id。", "err"); return; }
+  if (PROMPT && !$("promptText").value.trim()) {
+    showMsg(msg, "已选择示例音频，必须填写其对应文本 prompt_text。", "err"); return;
+  }
+  if (withDemo && $("demoText").value.length > 1000) {
+    showMsg(msg, "试听文本超过 1000 字符上限。", "err"); return;
+  }
+
+  setBusy(true);
+  try {
+    // 到这一步才真正开始上传
+    showMsg(msg, "正在上传音频…", "info");
+    const fileId = await ensureUploaded(SAMPLE, "voice_clone");
+    $("sampleState").textContent = SAMPLE.name + " · " + (SAMPLE.size / 1048576).toFixed(2) + " MB" +
+      SAMPLE.note + " · 已上传";
+    $("sampleState").className = "file-state ok";
+
+    let promptId = null;
+    if (PROMPT) {
+      promptId = await ensureUploaded(PROMPT, "prompt_audio");
+      $("promptState").textContent = PROMPT.name + " · " + (PROMPT.size / 1048576).toFixed(2) + " MB" +
+        PROMPT.note + " · 已上传";
+      $("promptState").className = "file-state ok";
+    }
+
+    const body = {
+      file_id: fileId,
+      voice_id: voiceId,
+      model: $("cloneModel").value,
+      language_boost: $("cloneLang").value,
+      prompt_file_id: promptId,
+      prompt_text: PROMPT ? $("promptText").value.trim() : "",
+      text_validation: $("textValidation").value.trim(),
+      accuracy: Number($("accuracy").value),
+      need_noise_reduction: $("noise").checked,
+      need_volume_normalization: $("vnorm").checked,
+      aigc_watermark: $("watermark").checked,
+      demo_text: withDemo ? $("demoText").value.trim() : "",
+    };
+
+    showMsg(msg, withDemo ? "正在克隆并合成试听音频，请勿关闭…" : "正在克隆音色…", "info");
+    const r = await postJSON("/api/clone", body, 180000);
+
+    if (!r.ok) {
+      showMsg(msg, r.error + (r.trace_id ? "（trace_id: " + r.trace_id + "）" : ""), "err");
+      return;
+    }
+
+    let html = "克隆成功：<strong>" + r.voice_id + "</strong>";
+    if (r.input_sensitive_type) {
+      html += "<br>⚠ 输入音频命中风控：" + (r.input_sensitive_label || r.input_sensitive_type);
+    }
+    if (r.extra_info && r.extra_info.usage_characters != null) {
+      html += "<br>本次试听计费字符：" + r.extra_info.usage_characters;
+    }
+    html += "<br>音色已存入台账，请到「② 音色合成」使用。<strong>¥9.90 音色费将在你首次正式合成时才扣</strong>，本次未计入。";
+    html += "<br><span class='hint'>复刻音色 7 天内未被正式合成会被系统删除</span>";
+    if (r.demo_audio_url) {
+      html += "<br><audio controls src='" + r.demo_audio_url + "'></audio>" +
+        "<a class='dl' href='" + r.demo_audio_url + "' download>下载试听音频</a>";
+    }
+    if (r.demo_warning) html += "<br><span style='color:var(--warn)'>" + r.demo_warning + "</span>";
+    msg.className = "msg show ok";
+    msg.innerHTML = html;
+
+    loadVoices();
+    demoMode = false;
+  } catch (err) {
+    showMsg(msg, err.message || "上传失败，请重试", "err");
+  } finally {
+    setBusy(false);
+  }
+}
+
+/* ------------------------------ 合成 ------------------------------ */
+
+async function loadVoices() {
+  try {
+    const r = await fetch("/api/voices");
+    const d = await r.json();
+    const sel = $("voiceSelect");
+    const prev = sel.value;
+    sel.innerHTML = "";
+    (d.voices || []).forEach((v) => {
+      const o = document.createElement("option");
+      o.value = v.voice_id;
+      // 已正式使用过的音色即已激活，永久保留，不再显示 7 天倒计时
+      const suffix = v.uses > 0 ? "（已入库）" :
+        (v.days_left != null ? "（剩余 " + v.days_left + " 天）" : "");
+      o.textContent = v.voice_id + suffix;
+      sel.appendChild(o);
+    });
+    if (prev && (d.voices || []).some((v) => v.voice_id === prev)) sel.value = prev;
+
+    const pending = (d.voices || []).filter((v) => v.uses === 0);
+    $("pendingHint").style.display = (d.voices || []).length && pending.length ? "" : "none";
+
+    $("voiceList").innerHTML = (d.voices || []).map((v) => {
+      const left = v.days_left;
+      let status, tail;
+      if (v.uses > 0) {
+        // 激活后的音色服务端长期保留，倒计时无意义
+        status = '<span class="oktext">此角色已入库</span>';
+        tail = "已使用 " + v.uses + " 次";
+      } else if (left != null && left <= 0) {
+        status = '<span class="warntext">尚未正式使用</span>';
+        tail = '<span class="expired">已超过 7 天，可能已被系统删除</span>';
+      } else {
+        status = '<span class="warntext">尚未正式使用，7 天内需至少合成一次</span>';
+        tail = left == null ? "" : "剩余 " + left + " 天";
+      }
+      return '<div class="voice-item"><span class="vid">' + v.voice_id + "</span> · " + status +
+             (tail ? " · " + tail : "") + "</div>";
+    }).join("") || '<p class="hint">台账为空，请先克隆一个音色。</p>';
+  } catch (e) {
+    $("voiceList").innerHTML = '<p class="hint">读取台账失败。</p>';
+  }
+}
+$("refreshVoices").addEventListener("click", loadVoices);
+
+$("btnTts").addEventListener("click", async () => {
+  const msg = $("ttsMsg");
+  clearMsg(msg);
+  const voiceId = $("voiceSelect").value;
+  const text = $("ttsText").value.trim();
+  if (!voiceId) { showMsg(msg, "请先选择音色。若台账为空，请先到「① 克隆音色」创建。", "err"); return; }
+  if (!text) { showMsg(msg, "请输入要合成的文本。", "err"); return; }
+
+  const n = chargedChars(text);
+  // 4000 计费字符约合 hd 模型 ¥1.4，低于此值不打扰用户
+  if (n > 4000 && !confirm("本次将按约 " + n + " 计费字符计费，费用较高。确认继续？")) return;
+
+  const body = {
+    voice_id: voiceId,
+    text: text,
+    model: $("ttsModel").value,
+    language_boost: $("ttsLang").value,
+    speed: Number($("ttsSpeed").value),
+    vol: Number($("ttsVol").value),
+    pitch: Number($("ttsPitch").value),
+    emotion: $("emotion").value || "",
+    audio_format: $("audioFormat").value,
+    pronunciation_rules: readPron($("ttsPronTable")),
+  };
+
+  setBusy(true);
+  showMsg(msg, "正在合成，请勿关闭…", "info");
+  const r = await postJSON("/api/tts", body, 320000);
+  setBusy(false);
+
+  if (!r.ok) {
+    showMsg(msg, r.error + (r.trace_id ? "（trace_id: " + r.trace_id + "）" : ""), "err");
+    return;
+  }
+
+  const chars = r.extra_info && r.extra_info.usage_characters != null ? r.extra_info.usage_characters : "未知";
+  const ms = r.extra_info && r.extra_info.audio_length ? (r.extra_info.audio_length / 1000).toFixed(1) + " 秒" : "未知";
+  msg.className = "msg show ok";
+  msg.innerHTML = "合成成功 · 计费字符 " + chars + " · 时长 " + ms +
+    "<audio controls src='" + r.audio_url + "'></audio>" +
+    "<a class='dl' href='" + r.audio_url + "' download='" + r.filename + "'>下载 " + r.filename + "</a>";
+
+  loadVoices();
+});
+
+boot();
+</script>
+</body>
+</html>

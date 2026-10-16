@@ -1,0 +1,27 @@
+# 密钥与本地数据，绝不入库
+.env
+data/output/
+data/tmp/
+data/voices.json
+data/*.bak
+data/*.tmp
+
+# 第三方登录凭证（yt-dlp 导出，含真实 SESSDATA）
+*cookies.txt
+
+# 本人的素材与中间产物，不属于本工具源码
+角色音频提取/
+音频剪辑配音乐/
+AI视频生成/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 编辑器与系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
